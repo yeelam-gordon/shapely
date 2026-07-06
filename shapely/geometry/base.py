@@ -273,12 +273,18 @@ class BaseGeometry(shapely.Geometry):
 
     @property
     def wkb(self):
-        """WKB representation of the geometry."""
+        """WKB representation of the geometry.
+
+        See :func:`shapely.to_wkb` for limitations of WKB serialization.
+        """
         return shapely.to_wkb(self)
 
     @property
     def wkb_hex(self):
-        """WKB hex representation of the geometry."""
+        """WKB hex representation of the geometry.
+
+        See :func:`shapely.to_wkb` for limitations of WKB serialization.
+        """
         return shapely.to_wkb(self, hex=True)
 
     def svg(self, scale_factor=1.0, **kwargs):
