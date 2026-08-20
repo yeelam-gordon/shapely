@@ -98,6 +98,10 @@ ignore = ["D000", "D004"]
 allow-long-titles = true
 max-line-length = 79
 
+[tool.pytest.ini_options]
+doctest_optionflags = ["NORMALIZE_WHITESPACE", "ELLIPSIS"]
+xfail_strict = true
+
 [tool.ruff]
 line-length = 88
 extend-exclude = ["docs/*", "benchmarks/*", "shapely/_version.py", "versioneer.py"]
