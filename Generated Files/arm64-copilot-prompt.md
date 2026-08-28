@@ -1,7 +1,7 @@
 # Windows Arm64 validation and Slidecast recording task
 
 You are the accountable execution agent on a physical Windows Arm64 machine.
-Keep repository modifications and generated evidence inside this checkout's declared paths. Read-only access to the resolved Slidecast directory under HOME, and dependency installation there when required, are explicitly permitted. Do not launch subagents.
+Keep repository modifications and generated evidence inside this checkout's declared paths. Read-only access to the resolved Slidecast directory under HOME, and dependency installation there when required, are explicitly permitted. Matching-ABI test environments outside the checkout are a temporary exception only when they live under a timestamped `$env:TEMP\shapely-arm64-evidence\<run-id>\venvs` root (or an exact equivalent path), and all retained logs/results still stay under the declared in-checkout evidence directory. Temporary venvs may be removed only after command logs are persisted; failed retained evidence must not be deleted. Do not launch subagents.
 
 ## Goal
 
@@ -101,8 +101,10 @@ For every produced wheel:
 5. Run `python -m delvewheel show <wheel>` and retain one report per wheel.
 6. Verify required GEOS and MSVC license files byte-for-byte.
 7. Create a clean, matching native interpreter environment outside the
-   checkout; install the wheel, run `pip check`, an isolated Shapely import,
-   and `pytest --pyargs shapely.tests`.
+   checkout, using the temporary venv exception above only; install the wheel,
+   run `pip check`, an isolated Shapely import, and `pytest --pyargs
+   shapely.tests`. Keep the command logs/results in the in-checkout evidence
+   directory, and do not delete failed retained evidence.
 8. Test clean uninstall. Test upgrade only when a compatible prior official
    Arm64 wheel exists; otherwise mark upgrade untested rather than using x64.
 
@@ -152,10 +154,19 @@ Following the installed Slidecast skill literally:
    narration steps. Use the corrected narration as the spoken source.
 4. Validate cue labels, storyboard structure, and exact narration/subtitle
    text before rendering.
-5. Install Slidecast prerequisites only when missing:
+5. Create and use a dedicated native Python venv at
+   `Generated Files\demo\slidecast\.venv`. This is the only persistent Python
+   dependency environment for the Slidecast run. Define `$slidecastVenv` and
+   `$slidecastPython`, then install prerequisites only when missing:
 
 ```powershell
-python -m pip install -r "$slidecastRoot\scripts\requirements.txt"
+$slidecastVenv = Join-Path (Get-Location) 'Generated Files\demo\slidecast\.venv'
+$null = New-Item -ItemType Directory -Force -Path (Split-Path -Parent $slidecastVenv)
+if (-not (Test-Path -LiteralPath $slidecastVenv)) {
+  python -m venv $slidecastVenv
+}
+$slidecastPython = Join-Path $slidecastVenv 'Scripts\python.exe'
+& $slidecastPython -m pip install -r "$slidecastRoot\scripts\requirements.txt"
 npm --prefix "$slidecastRoot\scripts" install
 npx --prefix "$slidecastRoot\scripts" playwright install chromium
 ffmpeg -version
@@ -165,7 +176,7 @@ ffprobe -version
 6. Render:
 
 ```powershell
-python "$slidecastRoot\scripts\build.py" `
+& $slidecastPython "$slidecastRoot\scripts\build.py" `
   --storyboard '.\Generated Files\demo\slidecast\storyboard.json' `
   --deck '.\Generated Files\demo\slidecast\deck.html' `
   --package-root '.\Generated Files\demo\slidecast' `
