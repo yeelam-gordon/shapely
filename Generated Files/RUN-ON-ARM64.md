@@ -34,7 +34,7 @@ if (-not (Test-Path -LiteralPath (Join-Path $slidecastRoot 'SKILL.md'))) {
 
 $prompt = Get-Content -Raw '.\Generated Files\arm64-copilot-prompt.md'
 copilot --autopilot --assisted-approval `
-  --add-dir $slidecastRoot `
+  --add-dir "$slidecastRoot" `
   --context long_context --reasoning-effort high `
   -C . -i $prompt
 ```

@@ -38,7 +38,7 @@ workspace.
 | Evidence | Result | Meaning |
 | --- | --- | --- |
 | Historical Shapely GitHub Actions run `32615526656` | Native `windows-11-arm` job succeeded on 2026-08-23 | The native lane is viable; this alone is not wheel or release proof |
-| Matching Arm artifact | 12,940,021 bytes, expired on 2026-08-28 | There is no retained binary to inspect |
+| Matching Arm artifact | 12,940,021 bytes; GitHub API queried on 2026-08-28 reported `expired=True` with `expires_at=2026-08-28T03:40:20Z` | The binary expired before inspection, so there is no retained artifact to inspect |
 | Official Shapely 2.1.2 PyPI metadata | Zero `win_arm64` files | No official Windows Arm64 wheel is claimed |
 | Current `ci\install_geos.cmd` | HTTP download without SHA-256 verification | Production release remains blocked on authenticated, verified GEOS input |
 | Terminal implementation review | One open high finding, `HV-301-003` | The complete executable evidence helper is not present |
