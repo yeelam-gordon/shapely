@@ -38,13 +38,11 @@ The Windows Arm runbook gives maintainers the commands, stop conditions, and rol
 
 9
 00:01:18,000 --> 00:01:30,000
-That review found a decisive gap. The terminal specification invokes ci\wheel_evidence.py producer,
-verify, and finalize, yet it does not contain the complete invoked helper.
+That review found a decisive gap. This checkout does not contain ci\wheel_evidence.py, so the producer, verify, and finalize evidence workflow is not implemented.
 
 10
 00:01:30,000 --> 00:01:40,000
-This is finding HV-301-003. Until an immutable, reviewed helper is restored, compiled,
-and negatively tested, the workflow is not implementation-ready.
+This is finding HV-301-003. Until an immutable, reviewed helper is added, compiled, and negatively tested, the workflow is not implementation-ready.
 
 11
 00:01:40,000 --> 00:01:53,000
@@ -98,4 +96,3 @@ win_arm64 filename and SHA-256 digest. No product code was changed here.
 00:03:31,000 --> 00:03:45,000
 No physical Arm test, binary inspection, performance improvement, power improvement, or wheel publication is claimed.
 The demo outcome is a credible evidence path, with every missing gate made actionable.
-

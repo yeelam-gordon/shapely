@@ -11,9 +11,8 @@ power, compatibility, or shipment.
 | `692` hits for `"win_arm64" "tool.cibuildwheel"`. | Windows Arm code-hit proxy, not a dependency graph. |
 | `140` packages in `win_arm64-wheels` release `2025.7.7`. | One unofficial curated downstream catalog, not total demand or official Shapely publication. |
 | The 12-finalist split is `1`, `1`, `6`, and `4`. | Conservative planning categories, not adoption or user forecasts. |
-| The video is `3:45`, with 467 whitespace tokens at approximately 124.53 tokens per minute. | Internal `narration.txt` and `subtitles.srt` measurements. |
+| The video is `3:45`, with 466 whitespace tokens at approximately 124.27 tokens per minute. | Internal `narration.txt` and `subtitles.srt` measurements. |
 
 The Arm64 execution agent must append current native evidence without deleting
 these historical limitations. A non-publishing native pass still is not an
 official release.
-
