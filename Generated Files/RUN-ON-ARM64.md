@@ -33,12 +33,13 @@ if (-not (Test-Path -LiteralPath (Join-Path $slidecastRoot 'SKILL.md'))) {
 }
 
 $prompt = Get-Content -Raw '.\Generated Files\arm64-copilot-prompt.md'
-copilot --autopilot --allow-all-tools --allow-all-urls `
+copilot --autopilot --assisted-approval `
   --add-dir $slidecastRoot `
   --context long_context --reasoning-effort high `
-  -C . -p $prompt
+  -C . -i $prompt
 ```
 
+Assisted approval judges tool requests instead of blanket-allowing them.
 The agent must stop immediately if Windows, the process, or Python is not
 native Arm64. Successful output is local evidence under
 `Generated Files\arm64-evidence\` and a narrated video at

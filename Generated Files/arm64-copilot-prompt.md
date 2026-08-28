@@ -1,7 +1,7 @@
 # Windows Arm64 validation and Slidecast recording task
 
 You are the accountable execution agent on a physical Windows Arm64 machine.
-Work only in this checkout. Do not launch subagents.
+Keep repository modifications and generated evidence inside this checkout's declared paths. Read-only access to the resolved Slidecast directory under HOME, and dependency installation there when required, are explicitly permitted. Do not launch subagents.
 
 ## Goal
 
