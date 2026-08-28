@@ -19,29 +19,13 @@ git clone https://github.com/yeelam-gordon/shapely.git
 Set-Location shapely
 git checkout hackathon/windows-arm64-evidence
 
-$slidecastRoot = Join-Path $HOME '.copilot\skills\slidecast'
-if (-not (Test-Path -LiteralPath (Join-Path $slidecastRoot 'SKILL.md'))) {
-  $slidecastMatches = Get-ChildItem `
-    -Path (Join-Path $HOME 'OneDrive*\Documents\.copilot\skills\slidecast\SKILL.md') `
-    -File `
-    -ErrorAction SilentlyContinue
-  switch (@($slidecastMatches).Count) {
-    1 { $slidecastRoot = Split-Path -Parent (@($slidecastMatches)[0].FullName) }
-    0 { throw "Slidecast skill not found at `$HOME\.copilot\skills\slidecast` or any `$HOME\OneDrive*\Documents\.copilot\skills\slidecast\SKILL.md` match." }
-    default { throw "Slidecast skill match was ambiguous: $(@($slidecastMatches).FullName -join '; ')." }
-  }
-}
-
-$prompt = Get-Content -Raw '.\Generated Files\arm64-copilot-prompt.md'
-copilot --autopilot --assisted-approval `
-  --add-dir "$slidecastRoot" `
-  --context long_context --reasoning-effort high `
-  -C . -i $prompt
+& '.\Generated Files\run-arm64-copilot.ps1'
 ```
 
-Assisted approval judges tool requests instead of blanket-allowing them.
-The agent must stop immediately if Windows, the process, or Python is not
-native Arm64. Successful output is local evidence under
+The launcher fails before starting Copilot unless Windows, the current process,
+and Python are native Arm64. Copilot starts in experimental assisted-approval
+mode, which uses the safety judge instead of granting blanket tool access.
+Successful output is local evidence under
 `Generated Files\arm64-evidence\` and a narrated video at
 `Generated Files\demo\slidecast\build\final.mp4`.
 
