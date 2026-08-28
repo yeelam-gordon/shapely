@@ -1,6 +1,6 @@
 This is a truthful Windows Arm wheel demo. It is not a wheel launch. The result is BLOCKED / NO-GO, and the value is a reusable way to turn an appealing green signal into release-grade evidence.
 
-The starting signal is real. Shapely already has a Windows ARM64 workflow lane. A public job, “Build ARM64 wheels on windows-11-arm,” succeeded in run 32615526656 on 2026-08-23. But the matching release-windows-11-arm-ARM64 artifact, 12,940,021 bytes, was expired on 2026-08-28. A successful historical job is not a reviewable wheel.
+The starting signal is real. Shapely already has a Windows ARM64 workflow lane. A public job, “Build ARM64 wheels on windows-11-arm,” succeeded in run 32615526656 on 2026-08-23. But the matching release-windows-11-arm-ARM64 artifact, 12,940,021 bytes, expired on 2026-08-28. A successful historical job is not a reviewable wheel.
 
 The current publication check is equally clear. Agent 6 queried official PyPI metadata for Shapely version 2.1.2 and found zero win_arm64 files. So there is no official file to inspect, install, or call shipped.
 

@@ -15,7 +15,7 @@ A public job, “Build ARM64 wheels on windows-11-arm,” succeeded in run 32615
 4
 00:00:29,000 --> 00:00:40,000
 But the matching release-windows-11-arm-ARM64 artifact, 12,940,021 bytes,
-was expired on 2026-08-28. A successful historical job is not a reviewable wheel.
+expired on 2026-08-28. A successful historical job is not a reviewable wheel.
 
 5
 00:00:40,000 --> 00:00:51,000

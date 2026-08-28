@@ -1,8 +1,8 @@
 # Windows Arm Python Wheels — evidence, not hype
 
-**Planned duration:** 3:45. `len(narration.split())` returns 466 whitespace-delimited
+**Planned duration:** 3:45. `len(narration.split())` returns 465 whitespace-delimited
 tokens. At the final 225-second SRT timeline, the computed pacing is
-`466 * 60 / 225 = 124.266666...` words per minute (approximately 124.27).
+`465 * 60 / 225 = 124` words per minute.
 This is inside the required 2–4 minute range. Every storyboard time derives
 from `Generated Files\demo\subtitles.srt`.
 
