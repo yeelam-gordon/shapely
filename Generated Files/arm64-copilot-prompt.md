@@ -49,7 +49,7 @@ $ErrorActionPreference = 'Stop'
 $os = [System.Runtime.InteropServices.RuntimeInformation]::OSArchitecture
 $process = [System.Runtime.InteropServices.RuntimeInformation]::ProcessArchitecture
 $pythonMachine = python -c "import platform; print(platform.machine())"
-if ($os -ne 'Arm64' -or $process -ne 'Arm64' -or $pythonMachine.Trim() -notmatch '^(ARM64|aarch64)$') {
+if ($os -ne [System.Runtime.InteropServices.Architecture]::Arm64 -or $process -ne [System.Runtime.InteropServices.Architecture]::Arm64 -or $pythonMachine.Trim() -notmatch '^(ARM64|aarch64)$') {
   throw "Native Arm64 required. OS=$os process=$process python=$pythonMachine"
 }
 ```
