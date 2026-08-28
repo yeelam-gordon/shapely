@@ -12,12 +12,28 @@ claim success without retained artifacts and command evidence.
 
 ## Read first
 
-1. Read `AGENTS.md`, `CONTRIBUTING.md`, `.github/workflows/release.yml`,
-   `pyproject.toml`, `ci/install_geos.cmd`, and every file under
-   `Generated Files\demo\`.
+1. Read `AGENTS.md` if it exists, plus `CONTRIBUTING.md`,
+   `.github/workflows/release.yml`, `pyproject.toml`, `ci/install_geos.cmd`,
+   and every file under `Generated Files\demo\`.
 2. Locate Slidecast in this order:
-   `$HOME\.copilot\skills\slidecast`, then
-   `C:\Users\yeelam\OneDrive - Microsoft\Documents\.copilot\skills\slidecast`.
+   `$HOME\.copilot\skills\slidecast`, then a bounded search under
+   `$HOME\OneDrive*\Documents\.copilot\skills` for exactly one
+   `slidecast\SKILL.md` match. Use:
+
+   ```powershell
+   $slidecastRoot = Join-Path $HOME '.copilot\skills\slidecast'
+   if (-not (Test-Path -LiteralPath (Join-Path $slidecastRoot 'SKILL.md'))) {
+     $slidecastMatches = Get-ChildItem `
+       -Path (Join-Path $HOME 'OneDrive*\Documents\.copilot\skills\slidecast\SKILL.md') `
+       -File `
+       -ErrorAction SilentlyContinue
+     switch (@($slidecastMatches).Count) {
+       1 { $slidecastRoot = Split-Path -Parent (@($slidecastMatches)[0].FullName) }
+       0 { throw "Slidecast skill not found at `$HOME\.copilot\skills\slidecast` or any `$HOME\OneDrive*\Documents\.copilot\skills\slidecast\SKILL.md` match." }
+       default { throw "Slidecast skill match was ambiguous: $(@($slidecastMatches).FullName -join '; ')." }
+     }
+   }
+   ```
    Read its `SKILL.md`, `references\storyboard-schema.md`, and
    `references\video-pipeline.md`. Stop with a clear error if unavailable.
 3. Record `git rev-parse HEAD`, `git status --short --branch`, all remotes,
@@ -175,4 +191,3 @@ Write a concise final response containing:
 
 Do not commit, push, publish, or delete evidence. The human owner decides what
 to retain and which focused upstream PRs to open.
-
