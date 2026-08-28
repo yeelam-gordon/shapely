@@ -1,0 +1,101 @@
+1
+00:00:00,000 --> 00:00:07,000
+This is a truthful Windows Arm wheel demo. It is not a wheel launch.
+
+2
+00:00:07,000 --> 00:00:16,000
+The result is BLOCKED / NO-GO, and the value is a reusable way to turn
+an appealing green signal into release-grade evidence.
+
+3
+00:00:16,000 --> 00:00:29,000
+The starting signal is real. Shapely already has a Windows ARM64 workflow lane.
+A public job, “Build ARM64 wheels on windows-11-arm,” succeeded in run 32615526656 on 2026-08-23.
+
+4
+00:00:29,000 --> 00:00:40,000
+But the matching release-windows-11-arm-ARM64 artifact, 12,940,021 bytes,
+was expired on 2026-08-28. A successful historical job is not a reviewable wheel.
+
+5
+00:00:40,000 --> 00:00:51,000
+The current publication check is equally clear. Agent 6 queried official PyPI metadata
+for Shapely version 2.1.2 and found zero win_arm64 files.
+
+6
+00:00:51,000 --> 00:00:56,000
+So there is no official file to inspect, install, or call shipped.
+
+7
+00:00:56,000 --> 00:01:07,000
+Our workflow makes that boundary visible. The manager assigns the bounded question.
+The design records immutable upstream pins, ownership, and release gates.
+
+8
+00:01:07,000 --> 00:01:18,000
+The implementation review tests whether the proposed controls are actually executable.
+The Windows Arm runbook gives maintainers the commands, stop conditions, and rollback path.
+
+9
+00:01:18,000 --> 00:01:30,000
+That review found a decisive gap. The terminal specification invokes ci\wheel_evidence.py producer,
+verify, and finalize, yet it does not contain the complete invoked helper.
+
+10
+00:01:30,000 --> 00:01:40,000
+This is finding HV-301-003. Until an immutable, reviewed helper is restored, compiled,
+and negatively tested, the workflow is not implementation-ready.
+
+11
+00:01:40,000 --> 00:01:53,000
+There is a second release stop. The current GEOS acquisition uses HTTP and has no SHA-256
+verification before extraction. A production candidate needs HTTPS, authoritative digest provenance,
+
+12
+00:01:53,000 --> 00:01:57,000
+hash-before-extraction, verified cache markers, and positive and negative integrity tests.
+
+13
+00:01:57,000 --> 00:02:11,000
+Why pursue this carefully? The demand numbers are opportunity proxies, not customer counts.
+The workspace records 17,760 GitHub code-search hits for tool.cibuildwheel: code hits, not unique repositories.
+
+14
+00:02:11,000 --> 00:02:25,000
+It records 692 hits for win_arm64 with tool.cibuildwheel: a Windows Arm code-hit proxy,
+not a dependency graph. And release 2025.7.7 of one curated downstream catalog lists 140 packages;
+
+15
+00:02:25,000 --> 00:02:37,000
+it is not total demand. The 12-finalist classification is also deliberately narrow:
+1 project is blocked only by this foundation, 1 has it among agent-resolvable blockers,
+
+16
+00:02:37,000 --> 00:02:49,000
+6 retain external or vendor blockers, and 4 are not materially gated. These are planning categories,
+not a forecast of users, downloads, performance, or power.
+
+17
+00:02:49,000 --> 00:03:01,000
+The path from NO-GO to release is exact. Restore and test the complete helper.
+Obtain the authoritative GEOS HTTPS digest. On a physical windows-11-arm runner,
+
+18
+00:03:01,000 --> 00:03:15,000
+build and verify all 7 specified ABI rows. Retain the wheel, manifests, logs, and verifier records
+for 30 days. Inspect tags, ARM64 PE binaries, repair output, licenses, clean installation,
+
+19
+00:03:15,000 --> 00:03:19,000
+upgrade, uninstall, isolated import, and the full Shapely test suite.
+
+20
+00:03:19,000 --> 00:03:31,000
+Only then may Shapely’s package-owned release query official PyPI and match every expected
+win_arm64 filename and SHA-256 digest. No product code was changed here.
+
+21
+00:03:31,000 --> 00:03:45,000
+No physical Arm test, binary inspection, performance improvement, power improvement, or wheel publication is claimed.
+The demo outcome is a credible evidence path, with every missing gate made actionable.
+
