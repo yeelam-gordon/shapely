@@ -101,6 +101,9 @@ max-line-length = 79
 [tool.pytest.ini_options]
 doctest_optionflags = ["NORMALIZE_WHITESPACE", "ELLIPSIS"]
 xfail_strict = true
+markers = [
+    "network: exercises live network access (e.g. real downloads); excluded from routine deterministic CI via -m 'not network'",
+]
 
 [tool.ruff]
 line-length = 88

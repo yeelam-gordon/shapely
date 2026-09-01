@@ -1,0 +1,11 @@
+# Generated hackathon media (cover art, screenshots, recordings) is produced by
+# tooling and is not source content. Scoped to this folder only so legitimate
+# source files elsewhere in the repository are never ignored.
+*.png
+*.jpg
+*.jpeg
+*.gif
+*.bmp
+*.mp4
+*.mov
+*.webm

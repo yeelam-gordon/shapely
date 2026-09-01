@@ -24,6 +24,36 @@ env:
   GEOS_CHECKSUM_PROVENANCE_URL: "https://github.com/libgeos/geos/releases/tag/3.13.1"
 
 jobs:
+  test_ci_evidence_scripts:
+    name: Test Windows ARM64 evidence scripts (ci/tests)
+    runs-on: windows-2025
+    steps:
+      - name: Checkout source
+        uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - name: Set up Python
+        uses: actions/setup-python@v7
+        with:
+          python-version: "3.13"
+
+      - name: Install test dependencies
+        shell: pwsh
+        run: python -m pip install --disable-pip-version-check pytest "packaging>=24"
+
+      - name: Run ci/tests
+        shell: pwsh
+        # Live-network tests (real downloads) are excluded on routine push/PR runs to
+        # keep this job deterministic; they still run on schedule/workflow_dispatch so
+        # the network paths remain covered.
+        run: |
+          if ('${{ github.event_name }}' -in @('schedule', 'workflow_dispatch')) {
+            python -m pytest ci\tests -q
+          } else {
+            python -m pytest ci\tests -m "not network" -q
+          }
+
   build_sdist:
     name: Build sdist
     runs-on: ubuntu-latest
@@ -271,7 +301,20 @@ jobs:
         with:
           name: windows-arm64-producer-metadata
           path: retained-metadata
+      - name: Check whether this ABI was produced
+        id: produced
+        shell: pwsh
+        run: |
+          $producer = Get-Content retained-metadata\arm64-wheel-producer.json | ConvertFrom-Json
+          $match = $producer.artifacts | Where-Object { $_.supported -and $_.runtime.label -eq '${{ matrix.label }}' }
+          if ($match) {
+            Add-Content -Path $env:GITHUB_OUTPUT -Value 'produced=true'
+          } else {
+            Add-Content -Path $env:GITHUB_OUTPUT -Value 'produced=false'
+            Write-Host "::notice title=ABI ${{ matrix.label }} not produced::No retained wheel for ${{ matrix.label }} this run (likely no upstream CPython runtime yet). Finalize will record it in skipped_labels instead of blocking publish."
+          }
       - name: Resolve local ARM64 verifier runtime
+        if: ${{ steps.produced.outputs.produced == 'true' }}
         shell: pwsh
         run: |
           python -m pip install --disable-pip-version-check "packaging>=24"
@@ -285,7 +328,7 @@ jobs:
           if (-not (Test-Path $pythonExe)) { throw "runtime executable missing: $pythonExe" }
           Add-Content -Path $env:GITHUB_ENV -Value ('WHEEL_EVIDENCE_PYTHON_EXE=' + $pythonExe)
       - name: Retain ARM64 runtime plan
-        if: ${{ always() }}
+        if: ${{ !cancelled() && steps.produced.outputs.produced == 'true' }}
         uses: actions/upload-artifact@v7
         with:
           name: windows-arm64-runtime-plan-${{ matrix.label }}
@@ -294,6 +337,7 @@ jobs:
           retention-days: 30
           compression-level: 0
       - name: Verify retained wheels for one ABI
+        if: ${{ steps.produced.outputs.produced == 'true' }}
         shell: pwsh
         run: |
           python -m pip install --disable-pip-version-check "packaging>=24" delvewheel
@@ -301,6 +345,7 @@ jobs:
           python ci\wheel_evidence.py validate --kind verifier --input arm64-wheel-verifier-${{ matrix.label }}.json
           if (-not (Test-Path arm64-wheel-verifier-${{ matrix.label }}.json) -or (Get-Item arm64-wheel-verifier-${{ matrix.label }}.json).Length -eq 0) { throw 'empty verifier record' }
       - uses: actions/upload-artifact@v7
+        if: ${{ steps.produced.outputs.produced == 'true' }}
         with:
           name: windows-arm64-verifier-${{ matrix.label }}
           path: |
@@ -351,7 +396,7 @@ jobs:
 
   nightly_upload:
     name: Upload nightly wheels
-    needs: [build_sdist, build_wheels_linux, build_wheels_mac_win, finalize_windows_arm64_evidence]
+    needs: [test_ci_evidence_scripts, build_sdist, build_wheels_linux, build_wheels_mac_win, finalize_windows_arm64_evidence]
     runs-on: ubuntu-latest
     if: ${{ success() && github.repository == 'shapely/shapely' && github.ref == 'refs/heads/main' && needs.finalize_windows_arm64_evidence.result == 'success' }}
     steps:
@@ -368,7 +413,7 @@ jobs:
 
   publish:
     name: Publish on GitHub and PyPI
-    needs: [build_sdist, build_wheels_linux, build_wheels_mac_win, finalize_windows_arm64_evidence]
+    needs: [test_ci_evidence_scripts, build_sdist, build_wheels_linux, build_wheels_mac_win, finalize_windows_arm64_evidence]
     runs-on: ubuntu-latest
     # release on every tag
     if: ${{ success() && github.event_name == 'push' && startsWith(github.event.ref, 'refs/tags/') && needs.finalize_windows_arm64_evidence.result == 'success' }}

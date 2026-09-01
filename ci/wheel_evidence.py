@@ -35,6 +35,8 @@ CORE_KEYS = {
     "filename_tags",
     "wheel_tags",
     "runtime",
+    "supported",
+    "unsupported_reason",
 }
 RUNTIME_KEYS = {
     "label",
@@ -83,6 +85,7 @@ FINAL_KEYS = {
     "geos",
     "verifiers",
     "artifacts",
+    "skipped_labels",
 }
 CHECK_KEYS = {
     "wheel_tag",
@@ -150,6 +153,12 @@ RUNTIMES = {
     },
 }
 EXPECTED_LABELS = {value["label"] for value in RUNTIMES.values()}
+# cp315/cp315t track a CPython series that has not shipped a python.org Windows
+# ARM64 installer yet. They remain fully verified the moment a wheel exists for
+# them, but their absence must never permanently block publishing the ABIs
+# that are already released (see require_artifact_label_coverage/finalize).
+OPTIONAL_LABELS = {"cp315", "cp315t"}
+REQUIRED_LABELS = EXPECTED_LABELS - OPTIONAL_LABELS
 
 
 def fail(message: str) -> None:
@@ -310,10 +319,15 @@ def validate_geos(value: object, where: str = "geos") -> dict[str, str]:
     return geos
 
 
-def runtime_for_tag(tag: Tag, where: str) -> dict[str, object]:
-    runtime = RUNTIMES.get((tag.interpreter, tag.abi))
-    if tag.platform != "win_arm64" or runtime is None:
+def runtime_for_tag(tag: Tag, where: str) -> dict[str, object] | None:
+    if tag.platform != "win_arm64":
         fail(f"{where}: unsupported ARM64 CPython ABI")
+    runtime = RUNTIMES.get((tag.interpreter, tag.abi))
+    if runtime is None:
+        # Producer stage records unknown/future ABIs rather than hard-failing so a
+        # single unexpected wheel can't drop evidence for every other ABI in the
+        # same run. Hard policy enforcement is deferred to finalize/gate.
+        return None
     return dict(runtime)
 
 
@@ -375,10 +389,21 @@ def validate_core(value: object, where: str) -> dict[str, object]:
         fail(f"{where}.version: filename/version mismatch")
     if filename_tags != frozenset({filename_tag}):
         fail(f"{where}: filename tag mismatch")
-    if core["runtime"] != runtime_for_tag(filename_tag, where):
-        fail(f"{where}.runtime: runtime mapping mismatch")
     Version(version)
-    validate_runtime(core["runtime"], f"{where}.runtime")
+    supported = require_bool(core["supported"], f"{where}.supported")
+    expected_runtime = runtime_for_tag(filename_tag, where)
+    if supported:
+        if expected_runtime is None or core["runtime"] != expected_runtime:
+            fail(f"{where}.runtime: runtime mapping mismatch")
+        if core["unsupported_reason"] is not None:
+            fail(f"{where}.unsupported_reason: must be null when supported")
+        validate_runtime(core["runtime"], f"{where}.runtime")
+    else:
+        if expected_runtime is not None:
+            fail(f"{where}.supported: known ABI must be marked supported")
+        if core["runtime"] is not None:
+            fail(f"{where}.runtime: must be null when unsupported")
+        require_text(core["unsupported_reason"], f"{where}.unsupported_reason")
     return core
 
 
@@ -432,10 +457,23 @@ def require_artifact_label_coverage(
     artifacts: list[dict[str, object]],
     expected_labels: set[str],
     where: str,
+    *,
+    required_labels: set[str] | None = None,
 ) -> set[str]:
+    if any(not artifact["supported"] for artifact in artifacts):
+        fail(f"{where}: unsupported ABI wheel(s) present; resolve at finalize/gate before labeling")
     labels = {artifact["runtime"]["label"] for artifact in artifacts}
-    if labels != expected_labels:
-        fail(f"{where}: exact ABI label coverage required")
+    if len(labels) != len(artifacts):
+        fail(f"{where}: duplicate ABI label present")
+    if required_labels is None:
+        # Strict callers (single-runtime verifier records) still require an exact match.
+        if labels != expected_labels:
+            fail(f"{where}: exact ABI label coverage required")
+        return labels
+    if not labels <= expected_labels:
+        fail(f"{where}: unknown ABI label present")
+    if not required_labels <= labels:
+        fail(f"{where}: required ABI label coverage missing")
     return labels
 
 
@@ -570,7 +608,27 @@ def validate_final(value: object) -> dict[str, object]:
         if key in seen:
             fail("final.artifacts: duplicate wheel forbidden")
         seen.add(key)
-    require_artifact_label_coverage(artifacts, EXPECTED_LABELS, "final.artifacts")
+    artifact_labels = require_artifact_label_coverage(
+        artifacts, EXPECTED_LABELS, "final.artifacts", required_labels=REQUIRED_LABELS
+    )
+
+    skipped_labels_value = final["skipped_labels"]
+    if not isinstance(skipped_labels_value, list):
+        fail("final.skipped_labels: list required")
+    skipped_labels: set[str] = set()
+    for index, item in enumerate(skipped_labels_value):
+        label = require_text(item, f"final.skipped_labels[{index}]")
+        if label in skipped_labels:
+            fail("final.skipped_labels: duplicate label forbidden")
+        skipped_labels.add(label)
+    if not skipped_labels <= OPTIONAL_LABELS:
+        fail("final.skipped_labels: only optional ABI labels may be skipped")
+    if skipped_labels & artifact_labels:
+        fail("final.skipped_labels: cannot skip a label that was verified")
+    if skipped_labels | artifact_labels != EXPECTED_LABELS:
+        fail("final.artifacts/skipped_labels: exact ABI label coverage required")
+    if sorted(skipped_labels) != skipped_labels_value:
+        fail("final.skipped_labels: sorted unique list required")
 
     synthetic_producer = {
         "schema_version": 1,
@@ -588,15 +646,15 @@ def validate_final(value: object) -> dict[str, object]:
     validate_producer(synthetic_producer)
 
     verifiers = final["verifiers"]
-    if not isinstance(verifiers, list) or len(verifiers) != len(EXPECTED_LABELS):
-        fail("final.verifiers: seven verifier rows required")
-    labels = set()
+    if not isinstance(verifiers, list) or len(verifiers) != len(artifact_labels):
+        fail("final.verifiers: one verifier row per verified ABI label required")
+    verifier_labels: set[str] = set()
     for index, verifier in enumerate(verifiers):
         ensure_exact_keys(verifier, {"label", "sha256", "created_at_utc", "job"}, f"final.verifiers[{index}]")
         label = require_text(verifier["label"], f"final.verifiers[{index}].label")
-        if label not in EXPECTED_LABELS or label in labels:
-            fail("final.verifiers: unique known labels required")
-        labels.add(label)
+        if label not in artifact_labels or label in verifier_labels:
+            fail("final.verifiers: unique verified labels required")
+        verifier_labels.add(label)
         require_hex64(verifier["sha256"], f"final.verifiers[{index}].sha256")
         validate_utc(verifier["created_at_utc"], f"final.verifiers[{index}].created_at_utc")
         same_job_identity(
@@ -604,7 +662,7 @@ def validate_final(value: object) -> dict[str, object]:
             producer["job"],
             f"final.verifiers[{index}].job",
         )
-    if labels != EXPECTED_LABELS:
+    if verifier_labels != artifact_labels:
         fail("final.verifiers: incomplete label set")
     return final
 
@@ -650,6 +708,12 @@ def wheel_core(path: os.PathLike[str] | str) -> dict[str, object]:
         "filename_tags": [str(filename_tag)],
         "wheel_tags": [str(wheel_tag)],
         "runtime": runtime,
+        "supported": runtime is not None,
+        "unsupported_reason": (
+            None
+            if runtime is not None
+            else f"unrecognized ARM64 CPython ABI {filename_tag.interpreter}-{filename_tag.abi}"
+        ),
     }
     validate_core(core, str(wheel_path))
     return core
@@ -912,7 +976,11 @@ def verify_command(args: argparse.Namespace) -> None:
     require_arm64(args.python_exe, runtime)
     wheelhouse = pathlib.Path(args.wheelhouse)
     by_name = {path.name: path for path in wheelhouse.glob("*.whl")}
-    selected = [core for core in producer["artifacts"] if core["runtime"]["label"] == args.label]
+    selected = [
+        core
+        for core in producer["artifacts"]
+        if core["runtime"] is not None and core["runtime"]["label"] == args.label
+    ]
     if not selected:
         fail("no retained wheel matches verifier label")
     if any(core["filename"] not in by_name for core in selected):
@@ -978,10 +1046,20 @@ def finalize_command(args: argparse.Namespace) -> None:
     producer_path = pathlib.Path(args.producer)
     producer = validate_producer(document(producer_path))
     producer_hash = sha256(producer_path)
-    require_artifact_label_coverage(producer["artifacts"], EXPECTED_LABELS, "producer.artifacts")
+    # Producer stage tolerates unrecognized future ABIs (see runtime_for_tag); finalize is
+    # the fail-closed gate that refuses to publish anything we can't map to a known ABI.
+    unsupported = [artifact for artifact in producer["artifacts"] if not artifact["supported"]]
+    if unsupported:
+        fail(
+            "producer.artifacts: unsupported ABI wheel(s) present, refusing to finalize: "
+            + ", ".join(sorted(artifact["filename"] for artifact in unsupported))
+        )
+    producer_labels = require_artifact_label_coverage(
+        producer["artifacts"], EXPECTED_LABELS, "producer.artifacts", required_labels=REQUIRED_LABELS
+    )
     verifier_dir = pathlib.Path(args.verifier_dir)
     verifier_paths = sorted(verifier_dir.glob("arm64-wheel-verifier-*.json"))
-    if len(verifier_paths) != len(EXPECTED_LABELS):
+    if len(verifier_paths) != len(producer_labels):
         fail("missing or duplicate verifier record")
 
     records: list[tuple[pathlib.Path, dict[str, object]]] = []
@@ -993,7 +1071,7 @@ def finalize_command(args: argparse.Namespace) -> None:
         records.append((path, verifier))
 
     labels = {verifier["runtime"]["label"] for _, verifier in records}
-    if labels != EXPECTED_LABELS:
+    if labels != producer_labels:
         fail("missing or duplicate verifier label")
 
     merged = [artifact for _, verifier in records for artifact in verifier["artifacts"]]
@@ -1001,7 +1079,8 @@ def finalize_command(args: argparse.Namespace) -> None:
     merged_set = {(artifact["filename"], artifact["sha256"]) for artifact in merged}
     if not producer_set or merged_set != producer_set or len(merged) != len(producer["artifacts"]):
         fail("verifier/producer wheel set mismatch")
-    require_artifact_label_coverage(merged, EXPECTED_LABELS, "final.artifacts")
+    require_artifact_label_coverage(merged, EXPECTED_LABELS, "final.artifacts", required_labels=REQUIRED_LABELS)
+    skipped_labels = sorted(EXPECTED_LABELS - producer_labels)
 
     verifier_entries = []
     for path, verifier in records:
@@ -1042,6 +1121,7 @@ def finalize_command(args: argparse.Namespace) -> None:
         "geos": producer["geos"],
         "verifiers": sorted(verifier_entries, key=lambda item: item["label"]),
         "artifacts": sorted(merged, key=lambda item: item["filename"]),
+        "skipped_labels": skipped_labels,
     }
     validate_final(doc)
     canonical_write(args.output, doc)

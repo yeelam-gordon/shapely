@@ -16,7 +16,7 @@ from datetime import datetime, timezone
 
 from packaging.version import InvalidVersion, Version
 
-from wheel_evidence import EXPECTED_LABELS, RUNTIMES
+from wheel_evidence import EXPECTED_LABELS, OPTIONAL_LABELS, RUNTIMES
 
 ROOT_INDEX_URL = "https://www.python.org/ftp/python/"
 PYTHON_FTP_ROOT = "https://www.python.org/ftp/python"
@@ -57,7 +57,7 @@ def runtime_specs() -> list[RuntimeSpec]:
                 label=label,
                 series=runtime["numeric_version"],
                 free_threaded=runtime["free_threaded"],
-                allow_prereleases=label in {"cp315", "cp315t"},
+                allow_prereleases=label in OPTIONAL_LABELS,
             )
         )
     return specs

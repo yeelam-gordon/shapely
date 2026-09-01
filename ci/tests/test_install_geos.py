@@ -60,6 +60,7 @@ def test_install_geos_rejects_invalid_cache_marker(tmp_path, marker):
     assert result.returncode == 13
 
 
+@pytest.mark.network
 def test_install_geos_rejects_bad_hash_before_extraction(tmp_path):
     geos_install = tmp_path / "install"
     result = run_install_geos(tmp_path, geos_install, "0" * 64)
@@ -72,6 +73,7 @@ def test_install_geos_rejects_bad_hash_before_extraction(tmp_path):
     assert not (geos_install / ".geos-source-sha256").exists()
 
 
+@pytest.mark.network
 def test_geos_sha256_literal_matches_official_archive(tmp_path):
     archive = tmp_path / "geos-3.13.1.tar.bz2"
     with urllib.request.urlopen("https://download.osgeo.org/geos/geos-3.13.1.tar.bz2", timeout=30) as response:

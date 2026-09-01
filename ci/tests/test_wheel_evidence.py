@@ -129,12 +129,19 @@ def install_fake_subprocess(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(we.subprocess, "run", fake_run)
 
 
-def build_round_trip(tmp_path: pathlib.Path, monkeypatch: pytest.MonkeyPatch) -> tuple[pathlib.Path, pathlib.Path]:
+def build_round_trip(
+    tmp_path: pathlib.Path,
+    monkeypatch: pytest.MonkeyPatch,
+    *,
+    labels: set[str] | None = None,
+) -> tuple[pathlib.Path, pathlib.Path]:
+    labels = sorted(we.EXPECTED_LABELS if labels is None else labels)
     wheelhouse = tmp_path / "wheelhouse"
     verifier_dir = tmp_path / "verifier-records"
     wheelhouse.mkdir()
     verifier_dir.mkdir()
-    create_all_wheels(wheelhouse)
+    for label in labels:
+        create_wheel(wheelhouse, tag_for_label(label))
 
     set_github_env(monkeypatch, tmp_path, job_key="build-windows-arm64")
     monkeypatch.setattr(we.platform, "machine", lambda: "ARM64")
@@ -151,7 +158,7 @@ def build_round_trip(tmp_path: pathlib.Path, monkeypatch: pytest.MonkeyPatch) ->
     monkeypatch.setattr(we, "package_version", lambda name: "1.17.0")
     install_fake_subprocess(monkeypatch)
 
-    for label in sorted(we.EXPECTED_LABELS):
+    for label in labels:
         set_github_env(monkeypatch, tmp_path, job_key=f"verify-{label}")
         we.verify_command(
             SimpleNamespace(
@@ -267,7 +274,7 @@ def test_validate_final_rejects_missing_verifier_label(tmp_path, monkeypatch):
     _, final_path = build_round_trip(tmp_path, monkeypatch)
     final = read_json(final_path)
     final["verifiers"] = final["verifiers"][:-1]
-    with pytest.raises(ValueError, match="seven verifier rows required"):
+    with pytest.raises(ValueError, match="one verifier row per verified ABI label required"):
         we.validate_final(final)
 
 
@@ -275,7 +282,7 @@ def test_validate_final_rejects_seven_labels_with_one_wheel(tmp_path, monkeypatc
     _, final_path = build_round_trip(tmp_path, monkeypatch)
     final = read_json(final_path)
     final["artifacts"] = final["artifacts"][:1]
-    with pytest.raises(ValueError, match="exact ABI label coverage required"):
+    with pytest.raises(ValueError, match="required ABI label coverage missing"):
         we.validate_final(final)
 
 
@@ -399,3 +406,94 @@ def test_verify_one_rejects_already_repaired_output_without_delvewheel_marker(tm
             tmp_path / "artifacts",
             "repair-reports",
         )
+
+
+def test_wheel_core_records_unknown_future_abi_without_raising(tmp_path):
+    # A future cibuildwheel/CPython release could emit an ABI tag this script has
+    # never heard of. Producer stage must record it instead of hard-failing, since a
+    # single unrecognized wheel must not drop evidence for every other retained ABI.
+    wheel = create_wheel(tmp_path, "cp316-cp316-win_arm64")
+    core = we.wheel_core(wheel)
+    assert core["supported"] is False
+    assert core["runtime"] is None
+    assert "cp316" in core["unsupported_reason"]
+    we.validate_core(core, str(wheel))
+
+
+def test_producer_command_tolerates_unknown_future_abi_alongside_known_wheels(tmp_path, monkeypatch):
+    wheelhouse = tmp_path / "wheelhouse"
+    wheelhouse.mkdir()
+    create_wheel(wheelhouse, tag_for_label("cp313"))
+    create_wheel(wheelhouse, "cp316-cp316-win_arm64")
+
+    set_github_env(monkeypatch, tmp_path, job_key="build-windows-arm64")
+    monkeypatch.setattr(we.platform, "machine", lambda: "ARM64")
+    monkeypatch.setattr(we, "command_version", lambda *command: f"{command[0]} version")
+    producer_path = tmp_path / "arm64-wheel-producer.json"
+    we.producer_command(SimpleNamespace(wheelhouse=str(wheelhouse), output=str(producer_path)))
+
+    producer = we.validate_producer(read_json(producer_path))
+    supported_flags = {artifact["supported"] for artifact in producer["artifacts"]}
+    assert supported_flags == {True, False}
+
+
+def test_finalize_command_rejects_unsupported_abi_wheel_in_producer(tmp_path, monkeypatch):
+    producer_path, _ = build_round_trip(tmp_path, monkeypatch, labels=we.REQUIRED_LABELS)
+    producer = read_json(producer_path)
+    producer["artifacts"].append(
+        {
+            "filename": "shapely-2.1.2-cp316-cp316-win_arm64.whl",
+            "distribution": "shapely",
+            "version": "2.1.2",
+            "sha256": "0" * 64,
+            "size_bytes": 1,
+            "filename_tags": ["cp316-cp316-win_arm64"],
+            "wheel_tags": ["cp316-cp316-win_arm64"],
+            "runtime": None,
+            "supported": False,
+            "unsupported_reason": "unrecognized ARM64 CPython ABI cp316-cp316",
+        }
+    )
+    we.canonical_write(producer_path, producer)
+
+    set_github_env(monkeypatch, tmp_path, job_key="finalize-windows-arm64")
+    with pytest.raises(ValueError, match="unsupported ABI wheel"):
+        we.finalize_command(
+            SimpleNamespace(
+                producer=str(producer_path),
+                verifier_dir=str(tmp_path / "verifier-records"),
+                output=str(tmp_path / "broken.json"),
+            )
+        )
+
+
+def test_finalize_command_records_unreleased_optional_abis_as_skipped(tmp_path, monkeypatch):
+    # cp315/cp315t have no python.org Windows ARM64 installer yet, so cibuildwheel
+    # never produces those wheels. Finalize must still succeed for the ABIs that do
+    # exist, recording the absent optional ABIs explicitly rather than blocking
+    # nightly/publish forever.
+    _, final_path = build_round_trip(tmp_path, monkeypatch, labels=we.REQUIRED_LABELS)
+    final = read_json(final_path)
+    we.validate_final(final)
+    assert final["skipped_labels"] == sorted(we.OPTIONAL_LABELS)
+    assert {artifact["runtime"]["label"] for artifact in final["artifacts"]} == we.REQUIRED_LABELS
+    assert len(final["verifiers"]) == len(we.REQUIRED_LABELS)
+
+
+def test_validate_final_rejects_skipping_a_required_label(tmp_path, monkeypatch):
+    _, final_path = build_round_trip(tmp_path, monkeypatch, labels=we.REQUIRED_LABELS)
+    final = read_json(final_path)
+    final["skipped_labels"] = sorted(we.OPTIONAL_LABELS | {"cp311"})
+    final["artifacts"] = [a for a in final["artifacts"] if a["runtime"]["label"] != "cp311"]
+    final["verifiers"] = [v for v in final["verifiers"] if v["label"] != "cp311"]
+    with pytest.raises(ValueError, match="required ABI label coverage missing"):
+        we.validate_final(final)
+
+
+def test_validate_final_rejects_skipped_label_that_was_also_verified(tmp_path, monkeypatch):
+    _, final_path = build_round_trip(tmp_path, monkeypatch, labels=we.REQUIRED_LABELS)
+    final = read_json(final_path)
+    final["skipped_labels"] = sorted(we.OPTIONAL_LABELS)
+    final["skipped_labels"][0] = "cp311"
+    with pytest.raises(ValueError, match="final.skipped_labels"):
+        we.validate_final(final)
