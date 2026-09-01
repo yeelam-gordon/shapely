@@ -1,5 +1,26 @@
 # Windows Arm Python Wheels: Evidence Before Release
 
+Project ID: `proj-cbf1556a-1ac6-461c-b29a-c478f559d69f`  
+Project URL: https://innovation-studio.microsoft.com/events/hackathon2026/submissions/projects/proj-cbf1556a-1ac6-461c-b29a-c478f559d69f  
+Current status: Saved; this nested folder shares the canonical project.
+
+> **Duplicate prevention:** Do not create a second project from this nested copy.
+
+## Why this matters
+
+Shapely is foundational Python geometry infrastructure with **4,495 GitHub
+stars** and **631 forks**. Shapely 2.1.2 publishes **zero official
+`win_arm64` wheels**, despite an existing native Windows Arm64 CI lane.
+
+The broader packaging ecosystem is substantial: GitHub code search found
+17,760 `tool.cibuildwheel` hits, including 692 Windows Arm64-related hits, and
+an unofficial Windows Arm wheel catalog lists 140 packages. These are ecosystem
+proxies, not unique users or a complete dependency graph.
+
+This file belongs to the same canonical Hackathon project as
+`C:\s\Demo\Hack2026\WindowsArmPythonWheels\Generated Files\hackathon-submission.md`.
+Do not create a second project for this nested copy.
+
 ## Submission status
 
 **Demo-ready as an evidence-first hackathon result. Not yet PR-ready or

@@ -20,6 +20,8 @@ on:
 
 env:
   GEOS_VERSION: "3.13.1"
+  GEOS_SHA256: "df2c50503295f325e7c8d7b783aca8ba4773919cde984193850cf9e361dfd28c"
+  GEOS_CHECKSUM_PROVENANCE_URL: "https://github.com/libgeos/geos/releases/tag/3.13.1"
 
 jobs:
   build_sdist:
@@ -162,7 +164,7 @@ jobs:
         uses: actions/cache@v6
         with:
           path: ${{ runner.temp }}/geos-${{ env.GEOS_VERSION }}
-          key: ${{ matrix.os }}-${{ matrix.arch }}-${{ env.GEOS_VERSION }}-${{ hashFiles('ci/*') }}
+          key: ${{ matrix.os }}-${{ matrix.arch }}-${{ env.GEOS_VERSION }}-${{ env.GEOS_SHA256 }}-${{ hashFiles('ci/*') }}
 
       - name: Add GEOS LICENSE
         run: cp ci/wheelbuilder/LICENSE_GEOS .
@@ -196,22 +198,162 @@ jobs:
             GEOS_INSTALL='${{ runner.temp }}\geos-${{ env.GEOS_VERSION }}'
             GEOS_LIBRARY_PATH='${{ runner.temp }}\geos-${{ env.GEOS_VERSION }}\lib'
             GEOS_INCLUDE_PATH='${{ runner.temp }}\geos-${{ env.GEOS_VERSION }}\include'
+            GEOS_SHA256='${{ env.GEOS_SHA256 }}'
           CIBW_BEFORE_ALL_MACOS: ./ci/install_geos.sh
           CIBW_BEFORE_ALL_WINDOWS: ci\install_geos.cmd
           CIBW_REPAIR_WHEEL_COMMAND_WINDOWS: delvewheel repair --add-path ${{ runner.temp }}\geos-${{ env.GEOS_VERSION }}\bin -w {dest_dir} -v {wheel}
-      - name: Upload artifacts
+      - name: Retain all non-Windows-ARM64 distributions
+        if: ${{ !(matrix.os == 'windows-11-arm' && matrix.arch == 'ARM64') }}
         uses: actions/upload-artifact@v7
         with:
           name: release-${{ matrix.os }}-${{ matrix.arch }}
           path: ./wheelhouse/*.whl
+          if-no-files-found: error
           retention-days: 5
+          compression-level: 0
+      - name: Produce and retain Windows ARM64 evidence
+        if: ${{ matrix.os == 'windows-11-arm' && matrix.arch == 'ARM64' }}
+        shell: pwsh
+        env:
+          GEOS_SHA256: ${{ env.GEOS_SHA256 }}
+          GEOS_CHECKSUM_PROVENANCE_URL: ${{ env.GEOS_CHECKSUM_PROVENANCE_URL }}
+        run: |
+          python -m pip install --disable-pip-version-check "packaging>=24"
+          python ci\wheel_evidence.py producer --wheelhouse wheelhouse --output arm64-wheel-producer.json
+          python ci\wheel_evidence.py validate --kind producer --input arm64-wheel-producer.json
+          if (-not (Test-Path arm64-wheel-producer.json) -or (Get-Item arm64-wheel-producer.json).Length -eq 0) { throw 'empty producer record' }
+      - name: Retain Windows ARM64 wheels
+        if: ${{ matrix.os == 'windows-11-arm' && matrix.arch == 'ARM64' }}
+        uses: actions/upload-artifact@v7
+        with:
+          name: release-windows-11-arm-ARM64
+          path: ./wheelhouse/*.whl
+          if-no-files-found: error
+          retention-days: 30
+          compression-level: 0
+      - name: Retain Windows ARM64 producer metadata
+        if: ${{ matrix.os == 'windows-11-arm' && matrix.arch == 'ARM64' }}
+        uses: actions/upload-artifact@v7
+        with:
+          name: windows-arm64-producer-metadata
+          path: arm64-wheel-producer.json
+          if-no-files-found: error
+          retention-days: 30
+          compression-level: 0
+
+  verify_windows_arm64_artifact:
+    name: Verify Windows ARM64 wheels (${{ matrix.label }})
+    needs: build_wheels_mac_win
+    runs-on: windows-11-arm
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { label: cp311, numeric: "3.11", free_threaded: false, allow_prereleases: false }
+          - { label: cp312, numeric: "3.12", free_threaded: false, allow_prereleases: false }
+          - { label: cp313, numeric: "3.13", free_threaded: false, allow_prereleases: false }
+          - { label: cp314, numeric: "3.14", free_threaded: false, allow_prereleases: false }
+          - { label: cp314t, numeric: "3.14", free_threaded: true, allow_prereleases: false }
+          - { label: cp315, numeric: "3.15", free_threaded: false, allow_prereleases: true }
+          - { label: cp315t, numeric: "3.15", free_threaded: true, allow_prereleases: true }
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.13"
+      - uses: actions/download-artifact@v8
+        with:
+          name: release-windows-11-arm-ARM64
+          path: retained-wheel
+      - uses: actions/download-artifact@v8
+        with:
+          name: windows-arm64-producer-metadata
+          path: retained-metadata
+      - name: Resolve local ARM64 verifier runtime
+        shell: pwsh
+        run: |
+          python -m pip install --disable-pip-version-check "packaging>=24"
+          python ci\arm64_python_runtime.py plan --label ${{ matrix.label }} --allow-prereleases ${{ matrix.allow_prereleases }} --output arm64-runtime-plan-${{ matrix.label }}.json
+          $runtimePlan = Get-Content arm64-runtime-plan-${{ matrix.label }}.json | ConvertFrom-Json
+          $runtime = $runtimePlan.runtimes | Select-Object -First 1
+          if (-not $runtime.available) { throw "ARM64 runtime unavailable for ${{ matrix.label }}: $($runtime.reason)" }
+          python ci\arm64_python_runtime.py install --label ${{ matrix.label }} --allow-prereleases ${{ matrix.allow_prereleases }} --root local-python --output arm64-runtime-install-${{ matrix.label }}.json
+          $runtimeInstall = Get-Content arm64-runtime-install-${{ matrix.label }}.json | ConvertFrom-Json
+          $pythonExe = $runtimeInstall.runtime.python_executable
+          if (-not (Test-Path $pythonExe)) { throw "runtime executable missing: $pythonExe" }
+          Add-Content -Path $env:GITHUB_ENV -Value ('WHEEL_EVIDENCE_PYTHON_EXE=' + $pythonExe)
+      - name: Retain ARM64 runtime plan
+        if: ${{ always() }}
+        uses: actions/upload-artifact@v7
+        with:
+          name: windows-arm64-runtime-plan-${{ matrix.label }}
+          path: arm64-runtime-plan-${{ matrix.label }}.json
+          if-no-files-found: error
+          retention-days: 30
+          compression-level: 0
+      - name: Verify retained wheels for one ABI
+        shell: pwsh
+        run: |
+          python -m pip install --disable-pip-version-check "packaging>=24" delvewheel
+          python ci\wheel_evidence.py verify --producer retained-metadata\arm64-wheel-producer.json --wheelhouse retained-wheel --source-root . --label ${{ matrix.label }} --python-exe $env:WHEEL_EVIDENCE_PYTHON_EXE --output arm64-wheel-verifier-${{ matrix.label }}.json --report-dir repair-reports
+          python ci\wheel_evidence.py validate --kind verifier --input arm64-wheel-verifier-${{ matrix.label }}.json
+          if (-not (Test-Path arm64-wheel-verifier-${{ matrix.label }}.json) -or (Get-Item arm64-wheel-verifier-${{ matrix.label }}.json).Length -eq 0) { throw 'empty verifier record' }
+      - uses: actions/upload-artifact@v7
+        with:
+          name: windows-arm64-verifier-${{ matrix.label }}
+          path: |
+            arm64-wheel-verifier-${{ matrix.label }}.json
+            repair-reports/*.delvewheel.txt
+          if-no-files-found: error
+          retention-days: 30
+          compression-level: 0
+
+  finalize_windows_arm64_evidence:
+    name: Finalize Windows ARM64 wheel evidence
+    needs: verify_windows_arm64_artifact
+    runs-on: windows-11-arm
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.13"
+      - uses: actions/download-artifact@v8
+        with:
+          name: release-windows-11-arm-ARM64
+          path: retained-wheel
+      - uses: actions/download-artifact@v8
+        with:
+          name: windows-arm64-producer-metadata
+          path: retained-metadata
+      - uses: actions/download-artifact@v8
+        with:
+          pattern: windows-arm64-verifier-*
+          merge-multiple: true
+          path: verifier-records
+      - name: Finalize retained ARM64 evidence
+        shell: pwsh
+        run: |
+          python -m pip install --disable-pip-version-check "packaging>=24"
+          python ci\wheel_evidence.py finalize --producer retained-metadata\arm64-wheel-producer.json --verifier-dir verifier-records --output arm64-wheel-provenance.json
+          python ci\wheel_evidence.py validate --kind final --input arm64-wheel-provenance.json
+          if (-not (Test-Path arm64-wheel-provenance.json) -or (Get-Item arm64-wheel-provenance.json).Length -eq 0) { throw 'empty final provenance record' }
+      - uses: actions/upload-artifact@v7
+        with:
+          name: windows-arm64-wheel-provenance
+          path: arm64-wheel-provenance.json
+          if-no-files-found: error
+          retention-days: 30
           compression-level: 0
 
   nightly_upload:
     name: Upload nightly wheels
-    needs: [build_sdist, build_wheels_linux, build_wheels_mac_win]
+    needs: [build_sdist, build_wheels_linux, build_wheels_mac_win, finalize_windows_arm64_evidence]
     runs-on: ubuntu-latest
-    if: github.repository == 'shapely/shapely' && github.ref == 'refs/heads/main'
+    if: ${{ success() && github.repository == 'shapely/shapely' && github.ref == 'refs/heads/main' && needs.finalize_windows_arm64_evidence.result == 'success' }}
     steps:
       - uses: actions/download-artifact@v8
         with:
@@ -226,10 +368,10 @@ jobs:
 
   publish:
     name: Publish on GitHub and PyPI
-    needs: [build_sdist, build_wheels_linux, build_wheels_mac_win]
+    needs: [build_sdist, build_wheels_linux, build_wheels_mac_win, finalize_windows_arm64_evidence]
     runs-on: ubuntu-latest
     # release on every tag
-    if: github.event_name == 'push' && startsWith(github.event.ref, 'refs/tags/')
+    if: ${{ success() && github.event_name == 'push' && startsWith(github.event.ref, 'refs/tags/') && needs.finalize_windows_arm64_evidence.result == 'success' }}
     steps:
       - uses: actions/download-artifact@v8
         with:

@@ -1,0 +1,12 @@
+{
+  "event": "Microsoft Global Hackathon 2026",
+  "eventId": "571ba5dc6cf9",
+  "projectId": "proj-cbf1556a-1ac6-461c-b29a-c478f559d69f",
+  "projectUrl": "https://innovation-studio.microsoft.com/events/hackathon2026/submissions/projects/proj-cbf1556a-1ac6-461c-b29a-c478f559d69f",
+  "submissionSource": "hackathon-submission.md",
+  "coverImage": "hackathon-cover.png",
+  "coverUploaded": true,
+  "coverUploadVerifiedAt": "2026-08-29T00:05:23Z",
+  "canonicalFolder": "..\\..\\..\\..\\Generated Files",
+  "creationPolicy": "This nested Shapely folder shares the canonical Windows Arm Python Wheels project. Do not create a duplicate."
+}
